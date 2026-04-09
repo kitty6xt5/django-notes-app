@@ -1,29 +1,63 @@
-@Library('Shared')_
-pipeline{
-    agent { label 'dev-server'}
-    
-    stages{
-        stage("Code clone"){
+@Library('shared') _
+pipeline {
+    agent { label "01" }
+
+    environment {
+        DOCKER_IMAGE = "kitty6xt5/notes-app:latest"
+    }
+
+    stages {
+
+        stage("hello"){
             steps{
-                sh "whoami"
-            clone("https://github.com/LondheShubham153/django-notes-app.git","main")
+                script{
+                    hello()
+                }
             }
         }
-        stage("Code Build"){
+        stage("code"){
             steps{
-            dockerbuild("notes-app","latest")
+                script{
+                clone("https://github.com/LondheShubham153/django-notes-app","main")
+                }
             }
         }
+
+        stage("build"){
+            steps{
+                echo "Building Docker image..."
+                sh "docker build -t notes-app:latest ."
+            }
+        }
+
         stage("Push to DockerHub"){
             steps{
-                dockerpush("dockerHubCreds","notes-app","latest")
+                echo "Pushing image to DockerHub..."
+
+                withCredentials([usernamePassword(
+                    credentialsId: "dockerhubcredRW",
+                    usernameVariable: "DOCKER_USER",
+                    passwordVariable: "DOCKER_PASS"
+                )]) {
+
+                    sh '''
+                    echo "$DOCKER_PASS" | docker login -u "$DOCKER_USER" --password-stdin
+                    docker tag notes-app:latest $DOCKER_USER/notes-app:latest
+                    docker push $DOCKER_USER/notes-app:latest
+                    '''
+                }
             }
         }
-        stage("Deploy"){
+
+        stage("deploy"){
             steps{
-                deploy()
+                echo "Deploying container..."
+
+                sh '''
+                docker rm -f notes-container || true
+                docker run -d -p 8000:8000 --name notes-container kitty6xt5/notes-app:latest
+                '''
             }
         }
-        
     }
 }
